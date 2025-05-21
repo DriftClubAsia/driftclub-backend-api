@@ -50,7 +50,9 @@ export async function GET(req) {
     });
 
     const filtered = data.filter((item) => {
-      const themeMatch = theme ? item.Theme?.toLowerCase().includes(theme.toLowerCase()) : true;
+      const normalizedTheme = item.Theme?.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      const query = theme ? theme.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() : null;
+      const themeMatch = query ? normalizedTheme?.includes(query) : true;
       return themeMatch;
     });
 
