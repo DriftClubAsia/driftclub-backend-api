@@ -28,7 +28,7 @@ export async function GET(req) {
     const sheets = getGoogleSheetsClient();
     const { searchParams } = new URL(req.url, 'http://localhost');
     const theme = searchParams.get('theme');
-    const region = searchParams.get('region');
+    
 
     const range = 'Sheet1!A1:Z1000';
     const response = await sheets.spreadsheets.values.get({
@@ -52,10 +52,7 @@ export async function GET(req) {
 
     const filtered = data.filter((item) => {
       const themeMatch = theme ? item.Theme?.toLowerCase().includes(theme.toLowerCase()) : true;
-      const regionMatch = region ? (
-        item.Latitude?.toLowerCase().includes(region.toLowerCase()) ||
-        item.Longitude?.toLowerCase().includes(region.toLowerCase())
-      ) : true;
+      const regionMatch = true;
       return themeMatch && regionMatch;
     });
 
