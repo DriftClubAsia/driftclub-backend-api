@@ -61,7 +61,8 @@ export async function GET(req) {
 
     return NextResponse.json({ results: filtered });
   } catch (err) {
-    console.error('Error fetching data from Google Sheets:', err);
+    console.error('Google Sheets ERROR:', err.message);
+    console.error(err.stack);
     return NextResponse.json({ error: 'Failed to fetch recommendations' }, { status: 500 });
   }
 }
