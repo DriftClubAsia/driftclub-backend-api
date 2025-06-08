@@ -14,5 +14,6 @@
   "googleapis": "^105.0.0",
   "supports-color": "^8.1.1",
   "encoding": "^0.1.13"
+  ,"openai": "^4.26.0"
 }
 }
