@@ -40,7 +40,7 @@ export async function GET(request) {
         type: process.env.GOOGLE_TYPE,
         project_id: process.env.GOOGLE_PROJECT_ID,
         private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\n/g, '\n'),
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_x509_cert_url: process.env.GOOGLE_CLIENT_CERT_URL
@@ -59,6 +59,8 @@ export async function GET(request) {
     });
 
     const rows = response.data.values || [];
+    console.log("📄 Raw Sheet Rows:", rows);
+    console.log("🔍 Search Params:", { theme, name, description, lat, lng });
 
     const results = rows
       .map(([Name, Theme, Latitude, Longitude, Description]) => ({
@@ -69,13 +71,13 @@ export async function GET(request) {
         Description
       }))
       .filter(row => {
-        const matchesTheme = theme ? fuzzyMatch(theme, row.Theme) : true;
-        const matchesName = name ? fuzzyMatch(name, row.Name) : true;
-        const matchesDescription = description ? fuzzyMatch(description, row.Description) : true;
-        const matchesLocation = lat && lng
-          ? Math.abs(row.Latitude - parseFloat(lat)) < 0.001 && Math.abs(row.Longitude - parseFloat(lng)) < 0.001
-          : true;
-        return matchesTheme && matchesName && matchesDescription && matchesLocation;
+        const matches = [
+          theme ? fuzzyMatch(theme, row.Theme) : false,
+          name ? fuzzyMatch(name, row.Name) : false,
+          description ? fuzzyMatch(description, row.Description) : false,
+          lat && lng ? Math.abs(row.Latitude - parseFloat(lat)) < 0.001 && Math.abs(row.Longitude - parseFloat(lng)) < 0.001 : false
+        ];
+        return matches.some(Boolean);
       });
 
     return new Response(JSON.stringify({ results }), {
