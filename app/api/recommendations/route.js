@@ -7,6 +7,8 @@ function fuzzyMatch(input = '', target = '', threshold = 0.6) {
   input = input.toLowerCase();
   target = target.toLowerCase();
 
+  if (target.includes(input)) return true;
+
   let matches = 0;
   let i = 0, j = 0;
 
@@ -82,11 +84,19 @@ export async function GET(request) {
 
     return new Response(JSON.stringify({ results }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
 
   } catch (err) {
     console.error('❌ Google Sheets fetch failed:', err);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
   }
 }
