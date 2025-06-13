@@ -1,65 +1,90 @@
+// route.js — API handler for /api/recommendations (Next.js App Router)
+
 import { google } from 'googleapis';
-import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+function fuzzyMatch(input = '', target = '', threshold = 0.6) {
+  if (!input || !target) return false;
+  input = input.toLowerCase();
+  target = target.toLowerCase();
 
-const GOOGLE_SHEETS_CREDENTIALS = process.env.GOOGLE_SHEETS_CREDENTIALS;
-const SHEET_ID = process.env.SHEET_ID;
+  let matches = 0;
+  let i = 0, j = 0;
 
-function getGoogleSheetsClient() {
-  if (!GOOGLE_SHEETS_CREDENTIALS) {
-    throw new Error('Missing GOOGLE_SHEETS_CREDENTIALS environment variable');
+  while (i < input.length && j < target.length) {
+    if (input[i] === target[j]) {
+      matches++;
+      i++;
+    }
+    j++;
   }
-  try {
-    const credentials = JSON.parse(GOOGLE_SHEETS_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
-    return google.sheets({ version: 'v4', auth });
-  } catch (err) {
-    console.error('Failed to parse GOOGLE_SHEETS_CREDENTIALS:', err.message);
-    throw err;
-  }
+
+  const score = matches / input.length;
+  return score >= threshold;
 }
 
-export async function GET(req) {
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const theme = searchParams.get('theme');
+  const name = searchParams.get('name');
+  const lat = searchParams.get('lat');
+  const lng = searchParams.get('lng');
+  const description = searchParams.get('description');
+
+  if (!theme && !name && !description && !(lat && lng)) {
+    return new Response(JSON.stringify({ error: 'Missing search parameters' }), { status: 400 });
+  }
+
   try {
-    const sheets = getGoogleSheetsClient();
-    const { searchParams } = new URL(req.url, 'http://localhost');
-    const theme = searchParams.get('theme');
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        type: process.env.GOOGLE_TYPE,
+        project_id: process.env.GOOGLE_PROJECT_ID,
+        private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_x509_cert_url: process.env.GOOGLE_CLIENT_CERT_URL
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
 
-    const range = 'Sheet1!A1:Z1000';
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const spreadsheetId = process.env.SHEET_ID;
+    const range = 'Sheet1!A2:E';
+
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range,
+      spreadsheetId,
+      range
     });
 
-    const rows = response.data.values;
-    const headers = rows[0];
-    const data = rows.slice(1).map((row) => {
-      const item = {};
-      headers.forEach((header, i) => {
-        item[header.trim()] = row[i];
+    const rows = response.data.values || [];
+
+    const results = rows
+      .map(([Name, Theme, Latitude, Longitude, Description]) => ({
+        Name,
+        Theme,
+        Latitude: parseFloat(Latitude),
+        Longitude: parseFloat(Longitude),
+        Description
+      }))
+      .filter(row => {
+        const matchesTheme = theme ? fuzzyMatch(theme, row.Theme) : true;
+        const matchesName = name ? fuzzyMatch(name, row.Name) : true;
+        const matchesDescription = description ? fuzzyMatch(description, row.Description) : true;
+        const matchesLocation = lat && lng
+          ? Math.abs(row.Latitude - parseFloat(lat)) < 0.001 && Math.abs(row.Longitude - parseFloat(lng)) < 0.001
+          : true;
+        return matchesTheme && matchesName && matchesDescription && matchesLocation;
       });
-      const allowedFields = ['Name', 'Theme', 'Latitude', 'Longitude', 'Description'];
-      const filteredItem = Object.fromEntries(
-        Object.entries(item).filter(([key]) => allowedFields.includes(key))
-      );
-      return filteredItem;
+
+    return new Response(JSON.stringify({ results }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    const filtered = data.filter((item) => {
-      const normalizedTheme = item.Theme?.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-      const query = theme ? theme.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() : null;
-      const themeMatch = query ? normalizedTheme?.includes(query) : true;
-      return themeMatch;
-    });
-
-    return NextResponse.json({ results: filtered });
   } catch (err) {
-    console.error('Google Sheets ERROR:', err.message);
-    console.error(err.stack);
-    return NextResponse.json({ error: 'Failed to fetch recommendations' }, { status: 500 });
+    console.error('❌ Google Sheets fetch failed:', err);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
   }
 }
